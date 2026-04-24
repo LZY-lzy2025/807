@@ -1,10 +1,10 @@
-name: 批量解密直播源
+name: IPTV 直播源自动解密
 
 on:
-  workflow_dispatch: # 允许在 GitHub Actions 页面手动点击运行
-  schedule:
-    # 每天 UTC 时间 00:00 (北京时间早上 08:00) 自动跑一次，不需要的话可以删掉这部分
-    - cron: '0 0 * * *'
+  workflow_dispatch: # 允许手动触发
+  push:
+    paths:
+      - 'value.txt'  # 当更新 value.txt 时自动运行
 
 jobs:
   decrypt-streams:
@@ -18,24 +18,30 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip' # 开启 pip 缓存加速运行
 
-      - name: 运行解密脚本
+      - name: 安装依赖
         run: |
-          # 确保 value.txt 存在，否则给个提示
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: 执行解密脚本
+        run: |
           if [ ! -f "value.txt" ]; then
-            echo "当前目录下没有 value.txt，创建一个空的防止报错。"
-            touch value.txt
+            echo "没有找到 value.txt，跳过执行。"
+            exit 0
           fi
           python decrypt.py
 
-      - name: 展示部分结果 (用于日志确认)
+      - name: 检查结果并输出日志
         run: |
           if [ -f "result.txt" ]; then
-            head -n 5 result.txt
+            echo "--- 最新解密结果预览 ---"
+            cat result.txt
           fi
 
-      - name: 上传解密结果为 Artifact
+      - name: 上传解密结果
         uses: actions/upload-artifact@v4
         with:
           name: Decrypted-Streams
           path: result.txt
+          retention-days: 3
