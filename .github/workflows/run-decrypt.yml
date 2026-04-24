@@ -1,0 +1,41 @@
+name: 批量解密直播源
+
+on:
+  workflow_dispatch: # 允许在 GitHub Actions 页面手动点击运行
+  schedule:
+    # 每天 UTC 时间 00:00 (北京时间早上 08:00) 自动跑一次，不需要的话可以删掉这部分
+    - cron: '0 0 * * *'
+
+jobs:
+  decrypt-streams:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 运行解密脚本
+        run: |
+          # 确保 value.txt 存在，否则给个提示
+          if [ ! -f "value.txt" ]; then
+            echo "当前目录下没有 value.txt，创建一个空的防止报错。"
+            touch value.txt
+          fi
+          python decrypt.py
+
+      - name: 展示部分结果 (用于日志确认)
+        run: |
+          if [ -f "result.txt" ]; then
+            head -n 5 result.txt
+          fi
+
+      - name: 上传解密结果为 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Decrypted-Streams
+          path: result.txt
