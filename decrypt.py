@@ -1,64 +1,54 @@
 import base64
 import os
+from Crypto.Cipher import DES
 from urllib.parse import urlparse
 
-# 这里的 key 是从网页源码 jetvh="mov" 反转得到的
-# 如果未来网页更新了密钥，直接修改这里即可
-SECRET_KEY = "vom"
+# 从网页控制台拿到的全局 DES 密钥 (8字节)
+SECRET_KEY = "iptv.com"
 
-def rc4_decrypt(data_bytes, key_string):
-    """标准的 RC4 流密码解密算法"""
-    # KSA (密钥调度)
-    S = list(range(256))
-    j = 0
-    for i in range(256):
-        j = (j + S[i] + ord(key_string[i % len(key_string)])) % 256
-        S[i], S[j] = S[j], S[i]
-    
-    # PRGA (伪随机生成)
-    i = j = 0
-    out = []
-    for byte in data_bytes:
-        i = (i + 1) % 256
-        j = (j + S[i]) % 256
-        S[i], S[j] = S[j], S[i]
-        K = S[(S[i] + S[j]) % 256]
-        out.append(chr(byte ^ K))
-        
-    return "".join(out)
+def unpad_pkcs7(data):
+    """去除 PKCS7 填充"""
+    pad_len = data[-1]
+    # 校验填充是否合法
+    if pad_len < 1 or pad_len > 8:
+        return data
+    return data[:-pad_len]
 
 def smart_decode(encrypted_str):
-    """智能处理 Base64：判断是否被反转"""
-    # 如果密文以 '=' 开头，说明是反转过的 Base64（比如线路 option 的值）
+    """智能处理 Base64：判断是否被反转并补齐填充位"""
     if encrypted_str.startswith('='):
         encrypted_str = encrypted_str[::-1]
     
-    # 补全 Base64 可能缺失的 '=' 填充位
     missing_padding = len(encrypted_str) % 4
     if missing_padding:
         encrypted_str += '=' * (4 - missing_padding)
         
     return base64.b64decode(encrypted_str)
 
-def decrypt_stream_url(encrypted_str, key):
+def decrypt_stream_url(encrypted_str, key_str):
     if not encrypted_str.strip():
         return ""
     
     try:
-        # 第一步：智能 Base64 解码提取加密的字节流
+        # 第一步：Base64 提取加密的二进制流
         encrypted_bytes = smart_decode(encrypted_str.strip())
         
-        # 第二步：使用提取到的密钥进行 RC4 解密
-        decrypted_text = rc4_decrypt(encrypted_bytes, key)
+        # 第二步：DES-ECB 解密
+        key = key_str.encode('utf-8')[:8] 
+        cipher = DES.new(key, DES.MODE_ECB)
+        decrypted_bytes = cipher.decrypt(encrypted_bytes)
         
-        # 第三步：兼容性拦截，修复特定 CDN 的握手失败问题
+        # 第三步：去除填充并转为文本
+        decrypted_text = unpad_pkcs7(decrypted_bytes).decode('utf-8')
+        
+        # 第四步：CDN 协议降级拦截 (针对 bytefcdnrd.com 报 ERR_INVALID_RESPONSE 的问题)
         parsed = urlparse(decrypted_text)
         if "bytefcdnrd.com" in parsed.netloc and parsed.scheme == "https":
             decrypted_text = decrypted_text.replace("https://", "http://", 1)
             
         return decrypted_text
     except Exception as e:
-        return f"解码失败 ({encrypted_str[:15]}...): {e}"
+        return f"解密失败 ({encrypted_str[:15]}...): {e}"
 
 def main():
     input_file = 'value.txt'
