@@ -4,7 +4,7 @@ import requests
 import os
 
 # 替换为你实际想要抓取的网页地址
-TARGET_URL = "https://这里填入你目标网站的完整URL" 
+TARGET_URL = "https://iptv807.com/?act=play&token=053b6c92f9990e708b1670c29a65ffa1&tid=ty&id=1" 
 
 def xor_decrypt(data_bytes, key_string):
     """标准的循环 XOR 解密算法"""
